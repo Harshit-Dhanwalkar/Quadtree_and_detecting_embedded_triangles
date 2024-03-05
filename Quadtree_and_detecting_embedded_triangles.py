@@ -81,16 +81,13 @@ def main():
     num_points = 100
     triangles, points = generate_random_triangles_and_points(num_triangles, num_points)
     fig, ax = plt.subplots()
+    ax.set_facecolor('black')  # Set background color to black
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     for triangle in triangles:
-        ax.add_patch(patches.Polygon(triangle.get_vertices(), closed=True, fill=False))
-    ax.scatter(*zip(*points))
+        ax.add_patch(patches.Polygon(triangle.get_vertices(), closed=True, fill=False, color='yellow'))  # Set triangle color to yellow
+    ax.scatter(*zip(*points), color='gray')  # Set points color to gray
     plt.show()  # Display the plot
-
-if __name__ == "__main__":
-    main()
-
 
 if __name__ == "__main__":
     main()
