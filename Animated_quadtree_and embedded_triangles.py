@@ -91,16 +91,8 @@ class Triangle:
 
         return False
 
-def generate_random_triangles_and_points(num_triangles, num_points):
-    points = [Point(random.random(), random.random()) for _ in range(num_points)]
-    triangles = []
-
-    for _ in range(num_triangles):
-        triangle_points = random.sample(points, 3)
-        triangle_vertices = [(p.x, p.y) for p in triangle_points]
-        triangles.append(Triangle(triangle_vertices))
-
-    return triangles, points
+def generate_random_points(num_points):
+    return [Point(random.random(), random.random()) for _ in range(num_points)]
 
 animated_points = []
 
@@ -110,10 +102,11 @@ class AnimatedPoint:
         self.scatter = None
 
     def update_coordinates(self):
-        self.point.x = random.random()
-        self.point.y = random.random()
+        # Move points in random directions
+        self.point.x += random.uniform(-0.01, 0.01)
+        self.point.y += random.uniform(-0.01, 0.01)
 
-def update(frame, animated_points, quadtree, ax, scatter):
+def update(frame, animated_points, quadtree, ax, scatter, triangle_patches):
     ax.clear()
     ax.set_facecolor('black')
     ax.set_xlim(0, 1)
@@ -125,36 +118,54 @@ def update(frame, animated_points, quadtree, ax, scatter):
 
     scatter = ax.scatter([p.point.x for p in animated_points], [p.point.y for p in animated_points], color='gray')
 
+    new_triangle_patches = []
+
+    # Update quadtree with the new positions of points
+    quadtree = Quadtree(Rectangle(0, 0, 1, 1), 4)
+    for point in animated_points:
+        quadtree.insert(point.point)
+
     for triangle in triangles:
         color = 'yellow' if triangle.is_inside_quadtree(quadtree) else 'red'
         triangle_patch = patches.Polygon(triangle.vertices, closed=True, fill=False, color=color)
         ax.add_patch(triangle_patch)
+        new_triangle_patches.append(triangle_patch)
+
+    # Update the list of triangle patches
+    triangle_patches[:] = new_triangle_patches
 
 def main():
-    global animated_points, triangles, quadtree
+    global animated_points, triangles
 
     num_triangles = 10
     num_points = 100
-    triangles, points = generate_random_triangles_and_points(num_triangles, num_points)
+    points = generate_random_points(num_points)
+    triangles = []
 
-    quadtree_boundary = Rectangle(0, 0, 1, 1)
-    quadtree = Quadtree(quadtree_boundary, 4)
+    for _ in range(num_triangles):
+        triangle_points = random.sample(points, 3)
+        triangle_vertices = [(p.x, p.y) for p in triangle_points]
+        triangles.append(Triangle(triangle_vertices))
 
-    for point in points:
-        quadtree.insert(point)
+    animated_points = [AnimatedPoint(p.x, p.y) for p in points]
 
     fig, ax = plt.subplots()
     ax.set_facecolor('black')
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
 
-    animated_points = [AnimatedPoint(random.random(), random.random()) for _ in range(num_points)]
-    scatter = ax.scatter([p.point.x for p in animated_points], [p.point.y for p in animated_points], color='gray')
-
     for animated_point in animated_points:
-        animated_point.scatter = scatter
+        animated_point.scatter = ax.scatter(animated_point.point.x, animated_point.point.y, color='gray')
 
-    ani = animation.FuncAnimation(fig, update, frames=100, interval=100, fargs=(animated_points, quadtree, ax, scatter), repeat=True)
+    triangle_patches = []
+
+    for triangle in triangles:
+        color = 'yellow' if triangle.is_inside_quadtree(Quadtree(Rectangle(0, 0, 1, 1), 4)) else 'red'
+        triangle_patch = patches.Polygon(triangle.vertices, closed=True, fill=False, color=color)
+        ax.add_patch(triangle_patch)
+        triangle_patches.append(triangle_patch)
+
+    ani = animation.FuncAnimation(fig, update, frames=100, interval=100, fargs=(animated_points, None, ax, None, triangle_patches), repeat=True)
 
     plt.show()
 
