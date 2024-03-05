@@ -1,42 +1,128 @@
 import random
-import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import matplotlib.animation as animation
+
+class Point:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def get_coordinates(self):
+        return self.x, self.y
+
+class Rectangle:
+    def __init__(self, x, y, w, h):
+        self.x = x
+        self.y = y
+        self.w = w
+        self.h = h
+
+    def contains(self, point):
+        return (
+            point.x >= self.x - self.w and
+            point.x < self.x + self.w and
+            point.y >= self.y - self.h and
+            point.y < self.y + self.h
+        )
+
+class Quadtree:
+    def __init__(self, boundary, capacity):
+        self.boundary = boundary
+        self.capacity = capacity
+        self.points = []
+        self.divided = False
+
+    def insert(self, point):
+        if not self.boundary.contains(point):
+            return False
+
+        if len(self.points) < self.capacity:
+            self.points.append(point)
+            return True
+
+        if not self.divided:
+            self.subdivide()
+
+        return (
+            self.northeast.insert(point) or
+            self.northwest.insert(point) or
+            self.southeast.insert(point) or
+            self.southwest.insert(point)
+        )
+
+    def subdivide(self):
+        x = self.boundary.x
+        y = self.boundary.y
+        w = self.boundary.w / 2
+        h = self.boundary.h / 2
+
+        ne = Rectangle(x + w, y - h, w, h)
+        self.northeast = Quadtree(ne, self.capacity)
+        nw = Rectangle(x - w, y - h, w, h)
+        self.northwest = Quadtree(nw, self.capacity)
+        se = Rectangle(x + w, y + h, w, h)
+        self.southeast = Quadtree(se, self.capacity)
+        sw = Rectangle(x - w, y + h, w, h)
+        self.southwest = Quadtree(sw, self.capacity)
+
+        self.divided = True
 
 class Triangle:
     def __init__(self, vertices):
-        self.vertices = np.array(vertices)
+        self.vertices = vertices
 
-    def contains(self, point):
-        v0 = self.vertices[:2]
-        v1 = self.vertices[2:4]
-        v2 = self.vertices[4:]
+    def is_inside_quadtree(self, quadtree):
+        rect = Rectangle(self.vertices[0][0], self.vertices[0][1], self.vertices[2][0] - self.vertices[0][0], self.vertices[2][1] - self.vertices[0][1])
+        return self._is_inside_quadtree_recursive(quadtree, rect)
 
-        v0v1 = v1 - v0
-        v0v2 = v2 - v0
-        vp = np.array(point) - v0
+    def _is_inside_quadtree_recursive(self, quadtree, rect):
+        if not quadtree.boundary.contains(Point(rect.x, rect.y)) and not quadtree.boundary.contains(Point(rect.x + rect.w, rect.y + rect.h)):
+            return False
 
-        dot00 = np.dot(v0v1, v0v1)
-        dot01 = np.dot(v0v1, v0v2)
-        dot02 = np.dot(v0v1, vp)
-        dot11 = np.dot(v0v2, v0v2)
-        dot12 = np.dot(v0v2, vp)
+        for point in quadtree.points:
+            if rect.contains(point):
+                return True
 
-        inv_denom = 1 / (dot00 * dot11 - dot01 * dot01)
-        u = (dot11 * dot02 - dot01 * dot12) * inv_denom
-        v = (dot00 * dot12 - dot01 * dot02) * inv_denom
+        if quadtree.divided:
+            return (
+                self._is_inside_quadtree_recursive(quadtree.northeast, rect) or
+                self._is_inside_quadtree_recursive(quadtree.northwest, rect) or
+                self._is_inside_quadtree_recursive(quadtree.southeast, rect) or
+                self._is_inside_quadtree_recursive(quadtree.southwest, rect)
+            )
 
-        return (u >= 0) and (v >= 0) and (u + v < 1)
+        return False
 
 def generate_random_triangles_and_points(num_triangles, num_points):
-    triangles = [Triangle([random.random() for _ in range(6)]) for _ in range(num_triangles)]
-    points = np.random.rand(num_points, 2)
+    points = [Point(random.random(), random.random()) for _ in range(num_points)]
+    triangles = []
+
+    for _ in range(num_triangles):
+        # Randomly select three points to form a triangle
+        triangle_points = random.sample(points, 3)
+        # Extract the coordinates of the selected points to form the triangle
+        triangle_vertices = [(p.x, p.y) for p in triangle_points]
+
+        triangles.append(Triangle(triangle_vertices))
+
     return triangles, points
+
+def on_key(event):
+    if event.key == 'q':
+        plt.close()
 
 def main():
     num_triangles = 10
     num_points = 100
     triangles, points = generate_random_triangles_and_points(num_triangles, num_points)
+
+    # Create Quadtree
+    quadtree_boundary = Rectangle(0, 0, 1, 1)
+    quadtree = Quadtree(quadtree_boundary, 4)
+
+    for point in points:
+        quadtree.insert(point)
 
     fig, ax = plt.subplots()
     ax.set_facecolor('black')
@@ -44,10 +130,13 @@ def main():
     ax.set_ylim(0, 1)
 
     for triangle in triangles:
-        color = 'yellow' if any(triangle.contains(p) for p in points) else 'red'
-        ax.add_patch(patches.Polygon(triangle.vertices.reshape(3, 2), closed=True, fill=False, color=color))
+        color = 'yellow' if any(triangle.is_inside_quadtree(quadtree) for p in points) else 'red'
+        ax.add_patch(patches.Polygon(triangle.vertices, closed=True, fill=False, color=color))
 
-    ax.scatter(points[:, 0], points[:, 1], color='gray')
+    ax.scatter([p.x for p in points], [p.y for p in points], color='gray')
+
+    plt.connect('key_press_event', on_key)  # Connect the key event callback
+
     plt.show()
 
 if __name__ == "__main__":
